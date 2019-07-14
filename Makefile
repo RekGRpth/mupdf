@@ -195,8 +195,8 @@ generate: source/pdf/js/util.js.h
 
 MUPDF_LIB = $(OUT)/libmupdf.so.0
 THIRD_LIB = $(OUT)/libmupdfthird.so.0
-THREAD_LIB = $(OUT)/libmupdf-threads.a
-PKCS7_LIB = $(OUT)/libmupdf-pkcs7.a
+THREAD_LIB = $(OUT)/libmupdf-threads.so.0
+PKCS7_LIB = $(OUT)/libmupdf-pkcs7.so.0
 
 $(MUPDF_LIB) : $(MUPDF_OBJ)
 $(THIRD_LIB) : $(THIRD_OBJ)
