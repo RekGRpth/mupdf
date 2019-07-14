@@ -203,7 +203,7 @@ $(THIRD_LIB) : $(THIRD_OBJ)
 $(THREAD_LIB) : $(THREAD_OBJ)
 $(PKCS7_LIB) : $(PKCS7_OBJ)
 
-INSTALL_LIBS := $(MUPDF_LIB) $(THIRD_LIB)
+INSTALL_LIBS := $(MUPDF_LIB) $(THIRD_LIB) $(THREAD_LIB) $(PKCS7_LIB)
 
 # --- Main tools and viewers ---
 
