@@ -8,7 +8,7 @@ fz_load_html_default_font(fz_context *ctx, fz_html_font_set *set, const char *fa
 {
 	int is_mono = !strcmp(family, "monospace");
 	int is_sans = !strcmp(family, "sans-serif");
-	const char *real_family = is_mono ? "Courier" : is_sans ? "Helvetica" : "Charis SIL";
+	const char *real_family = is_mono ? "Courier" : is_sans ? "Helvetica" : "Times";
 	const char *backup_family = is_mono ? "Courier" : is_sans ? "Helvetica" : "Times";
 	int idx = (is_mono ? 8 : is_sans ? 4 : 0) + is_bold * 2 + is_italic;
 	if (!set->fonts[idx])
