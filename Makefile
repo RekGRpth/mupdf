@@ -138,12 +138,12 @@ PKCS7_OBJ := $(PKCS7_SRC:%.c=$(OUT)/%.o)
 
 HEXDUMP_EXE := $(OUT)/scripts/hexdump.exe
 
-FONT_BIN := $(sort $(wildcard resources/fonts/urw/*.cff))
-FONT_BIN += $(sort $(wildcard resources/fonts/han/*.ttc))
-FONT_BIN += $(sort $(wildcard resources/fonts/droid/*.ttf))
-FONT_BIN += $(sort $(wildcard resources/fonts/noto/*.otf))
-FONT_BIN += $(sort $(wildcard resources/fonts/noto/*.ttf))
-FONT_BIN += $(sort $(wildcard resources/fonts/sil/*.cff))
+FONT_BIN := $(sort $(wildcard resources/fonts/ttf/*.ttf))
+#FONT_BIN += $(sort $(wildcard resources/fonts/han/*.ttc))
+#FONT_BIN += $(sort $(wildcard resources/fonts/droid/*.ttf))
+#FONT_BIN += $(sort $(wildcard resources/fonts/noto/*.otf))
+#FONT_BIN += $(sort $(wildcard resources/fonts/noto/*.ttf))
+#FONT_BIN += $(sort $(wildcard resources/fonts/sil/*.cff))
 
 FONT_GEN := $(FONT_BIN:%=generated/%.c)
 
