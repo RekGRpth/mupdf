@@ -160,6 +160,9 @@ fz_new_output_with_path(fz_context *ctx, const char *filename, int append)
 	if (!strcmp(filename, "/dev/null") || !fz_strcasecmp(filename, "nul:"))
 		return fz_new_output(ctx, 0, NULL, null_write, NULL, NULL);
 
+	if (!fz_strcasecmp(filename, "buf:"))
+		return fz_new_output_with_buffer(ctx, (fz_buffer *)ctx->user);
+
 #ifdef _WIN32
 	/* Ensure we create a brand new file. We don't want to clobber our old file. */
 	if (!append)
