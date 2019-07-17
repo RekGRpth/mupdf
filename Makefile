@@ -193,10 +193,10 @@ generate: source/pdf/js/util.js.h
 
 # --- Library ---
 
-MUPDF_LIB = $(OUT)/libmupdf.so
-THIRD_LIB = $(OUT)/libmupdfthird.so
-THREAD_LIB = $(OUT)/libmupdf-threads.so
-PKCS7_LIB = $(OUT)/libmupdf-pkcs7.so
+MUPDF_LIB = $(OUT)/libmupdf.so.0
+THIRD_LIB = $(OUT)/libmupdfthird.so.0
+THREAD_LIB = $(OUT)/libmupdf-threads.so.0
+PKCS7_LIB = $(OUT)/libmupdf-pkcs7.so.0
 
 $(MUPDF_LIB) : $(MUPDF_OBJ)
 $(THIRD_LIB) : $(THIRD_OBJ)
