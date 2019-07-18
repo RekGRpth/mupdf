@@ -89,20 +89,20 @@ const unsigned char *
 fz_lookup_base14_font(fz_context *ctx, const char *name, int *size)
 {
 #ifndef TOFU_BASE14
-	if (!strcmp(name, "Courier")) RETURN(ttf,LiberationMono_Regular_ttf);
-	if (!strcmp(name, "Courier-Oblique")) RETURN(ttf,LiberationMono_Italic_ttf);
-	if (!strcmp(name, "Courier-Bold")) RETURN(ttf,LiberationMono_Bold_ttf);
-	if (!strcmp(name, "Courier-BoldOblique")) RETURN(ttf,LiberationMono_BoldItalic_ttf);
-	if (!strcmp(name, "Helvetica")) RETURN(ttf,LiberationSans_Regular_ttf);
-	if (!strcmp(name, "Helvetica-Oblique")) RETURN(ttf,LiberationSans_Italic_ttf);
-	if (!strcmp(name, "Helvetica-Bold")) RETURN(ttf,LiberationSans_Bold_ttf);
-	if (!strcmp(name, "Helvetica-BoldOblique")) RETURN(ttf,LiberationSans_BoldItalic_ttf);
-	if (!strcmp(name, "Times-Roman")) RETURN(ttf,LiberationSerif_Regular_ttf);
-	if (!strcmp(name, "Times-Italic")) RETURN(ttf,LiberationSerif_Italic_ttf);
-	if (!strcmp(name, "Times-Bold")) RETURN(ttf,LiberationSerif_Bold_ttf);
-	if (!strcmp(name, "Times-BoldItalic")) RETURN(ttf,LiberationSerif_BoldItalic_ttf);
-//	if (!strcmp(name, "Symbol")) RETURN(urw,StandardSymbolsPS_cff);
-//	if (!strcmp(name, "ZapfDingbats")) RETURN(urw,Dingbats_cff);
+	if (!strcmp(name, "Courier")) RETURN(urw,NimbusMonoPS_Regular_cff);
+	if (!strcmp(name, "Courier-Oblique")) RETURN(urw,NimbusMonoPS_Italic_cff);
+	if (!strcmp(name, "Courier-Bold")) RETURN(urw,NimbusMonoPS_Bold_cff);
+	if (!strcmp(name, "Courier-BoldOblique")) RETURN(urw,NimbusMonoPS_BoldItalic_cff);
+	if (!strcmp(name, "Helvetica")) RETURN(urw,NimbusSans_Regular_cff);
+	if (!strcmp(name, "Helvetica-Oblique")) RETURN(urw,NimbusSans_Italic_cff);
+	if (!strcmp(name, "Helvetica-Bold")) RETURN(urw,NimbusSans_Bold_cff);
+	if (!strcmp(name, "Helvetica-BoldOblique")) RETURN(urw,NimbusSans_BoldItalic_cff);
+	if (!strcmp(name, "Times-Roman")) RETURN(urw,NimbusRoman_Regular_cff);
+	if (!strcmp(name, "Times-Italic")) RETURN(urw,NimbusRoman_Italic_cff);
+	if (!strcmp(name, "Times-Bold")) RETURN(urw,NimbusRoman_Bold_cff);
+	if (!strcmp(name, "Times-BoldItalic")) RETURN(urw,NimbusRoman_BoldItalic_cff);
+	if (!strcmp(name, "Symbol")) RETURN(urw,StandardSymbolsPS_cff);
+	if (!strcmp(name, "ZapfDingbats")) RETURN(urw,Dingbats_cff);
 #endif
 	return *size = 0, NULL;
 }
@@ -135,29 +135,29 @@ fz_lookup_builtin_font(fz_context *ctx, const char *name, int is_bold, int is_it
 {
 #ifndef TOFU_BASE14
 	if (!strcmp(name, "Courier")) {
-		FAMILY(ttf, LiberationMono_Regular_ttf,
-				LiberationMono_Italic_ttf,
-				LiberationMono_Bold_ttf,
-				LiberationMono_BoldItalic_ttf)
+		FAMILY(urw, NimbusMonoPS_Regular_cff,
+				NimbusMonoPS_Italic_cff,
+				NimbusMonoPS_Bold_cff,
+				NimbusMonoPS_BoldItalic_cff)
 	}
 	if (!strcmp(name, "Helvetica") || !strcmp(name, "Arial")) {
-		FAMILY(ttf, LiberationSans_Regular_ttf,
-				LiberationSans_Italic_ttf,
-				LiberationSans_Bold_ttf,
-				LiberationSans_BoldItalic_ttf)
+		FAMILY(urw, NimbusSans_Regular_cff,
+				NimbusSans_Italic_cff,
+				NimbusSans_Bold_cff,
+				NimbusSans_BoldItalic_cff)
 	}
 	if (!strcmp(name, "Times") || !strcmp(name, "Times Roman") || !strcmp(name, "Times New Roman")) {
-		FAMILY(ttf, LiberationSerif_Regular_ttf,
-				LiberationSerif_Italic_ttf,
-				LiberationSerif_Bold_ttf,
-				LiberationSerif_BoldItalic_ttf)
+		FAMILY(urw, NimbusRoman_Regular_cff,
+				NimbusRoman_Italic_cff,
+				NimbusRoman_Bold_cff,
+				NimbusRoman_BoldItalic_cff)
 	}
-//	if (!strcmp(name, "Dingbats") || !strcmp(name, "Zapf Dingbats")) {
-//		RETURN(urw, Dingbats_cff);
-//	}
-//	if (!strcmp(name, "Symbol")) {
-//		RETURN(urw, StandardSymbolsPS_cff);
-//	}
+	if (!strcmp(name, "Dingbats") || !strcmp(name, "Zapf Dingbats")) {
+		RETURN(urw, Dingbats_cff);
+	}
+	if (!strcmp(name, "Symbol")) {
+		RETURN(urw, StandardSymbolsPS_cff);
+	}
 #endif
 #ifndef TOFU_SIL
 	if (!strcmp(name, "Charis SIL")) {
