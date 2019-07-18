@@ -60,7 +60,9 @@
 	unwanted fonts.
 */
 /* To avoid all noto fonts except CJK, enable: */
-/* #define TOFU */
+#define TOFU
+#define NOTO_SMALL
+#define NO_CJK
 
 /* To skip the CJK font, enable: (this implicitly enables TOFU_CJK_EXT and TOFU_CJK_LANG) */
 /* #define TOFU_CJK */
@@ -147,6 +149,10 @@
 #ifndef FZ_ENABLE_EPUB
 #define FZ_ENABLE_EPUB 1
 #endif /* FZ_ENABLE_EPUB */
+
+#ifndef FZ_ENABLE_GPRF
+#define FZ_ENABLE_GPRF 0
+#endif /* FZ_ENABLE_GPRF */
 
 #ifndef FZ_ENABLE_JPX
 #define FZ_ENABLE_JPX 1

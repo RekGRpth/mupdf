@@ -24,10 +24,6 @@
 	Define TOFU_BASE14 to skip the Base 14 fonts (warning: makes PDF unusable).
 */
 
-#define NOTO_SMALL
-#define NO_CJK
-#define TOFU
-
 #ifdef NOTO_SMALL
 #define TOFU_CJK_EXT
 #define TOFU_SYMBOL
