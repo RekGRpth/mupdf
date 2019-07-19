@@ -150,10 +150,6 @@
 #define FZ_ENABLE_EPUB 1
 #endif /* FZ_ENABLE_EPUB */
 
-#ifndef FZ_ENABLE_GPRF
-#define FZ_ENABLE_GPRF 0
-#endif /* FZ_ENABLE_GPRF */
-
 #ifndef FZ_ENABLE_JPX
 #define FZ_ENABLE_JPX 1
 #endif /* FZ_ENABLE_JPX */
