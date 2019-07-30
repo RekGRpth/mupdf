@@ -35,7 +35,7 @@
 /*
 	Choose whether to enable ICC color profiles.
 */
-/* #define FZ_ENABLE_ICC 1 */
+#define FZ_ENABLE_ICC 0
 
 /*
 	Choose whether to enable JPEG2000 decoding.
@@ -49,7 +49,7 @@
 	Choose whether to enable JavaScript.
 	By default JavaScript is enabled both for mutool and PDF interactivity.
 */
-/* #define FZ_ENABLE_JS 1 */
+#define FZ_ENABLE_JS 0
 
 /*
 	Choose which fonts to include.

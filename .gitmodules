@@ -1,6 +1,0 @@
-[submodule "thirdparty/mujs"]
-	path = thirdparty/mujs
-	url = ../mujs.git
-[submodule "thirdparty/lcms2"]
-	path = thirdparty/lcms2
-	url = ../thirdparty-lcms2.git

@@ -230,7 +230,7 @@ ifeq ($(USE_SYSTEM_MUJS),yes)
   THIRD_LIBS += $(SYS_MUJS_LIBS)
 else
 
-THIRD_SRC += thirdparty/mujs/one.c
+THIRD_SRC += $(sort $(wildcard thirdparty/mujs/one.c))
 THIRD_CFLAGS += -Ithirdparty/mujs
 
 $(OUT)/thirdparty/mujs/%.o: thirdparty/mujs/%.c
