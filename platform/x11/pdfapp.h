@@ -74,12 +74,14 @@ struct pdfapp_s
 	float resolution;
 	int rotate;
 	fz_pixmap *image;
+	int imgw, imgh;
 	int grayscale;
 	fz_colorspace *colorspace;
 	int invert;
 	int tint, tint_white;
 	int useicc;
 	int useseparations;
+	int aalevel;
 
 	/* presentation mode */
 	int presentation_mode;

@@ -173,7 +173,6 @@ static int showoutline = 0;
 static int showlinks = 0;
 static int showsearch = 0;
 static int showinfo = 0;
-static int showhelp = 0;
 int showannotate = 0;
 int showform = 0;
 
@@ -399,6 +398,79 @@ static int search_page = -1;
 static int search_hit_page = -1;
 static int search_hit_count = 0;
 static fz_quad search_hit_quads[5000];
+
+static char *help_dialog_text =
+	"The middle mouse button (scroll wheel button) pans the document view. "
+	"The right mouse button selects a region and copies the marked text to the clipboard."
+	"\n"
+	"\n"
+	"F1 - show this message\n"
+	"i - show document information\n"
+	"o - show document outline\n"
+	"a - show annotation editor\n"
+	"L - highlight links\n"
+	"F - highlight form fields\n"
+	"r - reload file\n"
+	"S - save file (only for PDF)\n"
+	"q - quit\n"
+	"\n"
+	"< - decrease E-book font size\n"
+	"> - increase E-book font size\n"
+	"A - toggle anti-aliasing\n"
+	"I - toggle inverted color mode\n"
+	"C - toggle tinted color mode\n"
+	"E - toggle ICC color management\n"
+	"e - toggle spot color emulation\n"
+	"\n"
+	"f - fullscreen window\n"
+	"w - shrink wrap window\n"
+	"W - fit to width\n"
+	"H - fit to height\n"
+	"Z - fit to page\n"
+	"z - reset zoom\n"
+	"[number] z - set zoom resolution in DPI\n"
+	"plus - zoom in\n"
+	"minus - zoom out\n"
+	"[ - rotate counter-clockwise\n"
+	"] - rotate clockwise\n"
+	"arrow keys - scroll in small increments\n"
+	"h, j, k, l - scroll in small increments\n"
+	"\n"
+	"b - smart move backward\n"
+	"space - smart move forward\n"
+	"comma or page up - go backward\n"
+	"period or page down - go forward\n"
+	"g - go to first page\n"
+	"G - go to last page\n"
+	"[number] g - go to page number\n"
+	"\n"
+	"m - save current location in history\n"
+	"t - go backward in history\n"
+	"T - go forward in history\n"
+	"[number] m - save current location in numbered bookmark\n"
+	"[number] t - go to numbered bookmark\n"
+	"\n"
+	"/ - search for text forward\n"
+	"? - search for text backward\n"
+	"n - repeat search\n"
+	"N - repeat search in reverse direction"
+	;
+
+static void help_dialog(void)
+{
+	static int scroll;
+	ui_dialog_begin(500, 1000);
+	ui_layout(T, X, W, 2, 2);
+	ui_label("MuPDF %s", FZ_VERSION);
+	ui_spacer();
+	ui_layout(B, NONE, S, 2, 2);
+	if (ui_button("Okay") || ui.key == KEY_ENTER || ui.key == KEY_ESCAPE)
+		ui.dialog = NULL;
+	ui_spacer();
+	ui_layout(ALL, BOTH, CENTER, 2, 2);
+	ui_label_with_scrollbar(help_dialog_text, 0, 0, &scroll);
+	ui_dialog_end();
+}
 
 static char error_message[256];
 static void error_dialog(void)
@@ -658,6 +730,24 @@ static void pop_future(void)
 	while (future_count > 0 && currentpage == here)
 		restore_mark(future[--future_count]);
 	push_history();
+}
+
+static void relayout(void)
+{
+	if (layout_em < 6) layout_em = 6;
+	if (layout_em > 36) layout_em = 36;
+	if (fz_is_document_reflowable(ctx, doc))
+	{
+		fz_bookmark mark = fz_make_bookmark(ctx, doc, currentpage);
+		fz_layout_document(ctx, doc, layout_w, layout_h, layout_em);
+		currentpage = fz_lookup_bookmark(ctx, doc, mark);
+		history_count = 0;
+		future_count = 0;
+
+		load_page();
+		render_page();
+		update_title();
+	}
 }
 
 static int count_outline(fz_outline *node, int end)
@@ -1092,14 +1182,14 @@ static void do_app(void)
 		glutLeaveMainLoop();
 
 	if (ui.down || ui.middle || ui.right || ui.key)
-		showinfo = showhelp = 0;
+		showinfo = 0;
 
 	if (!ui.focus && ui.key && ui.plain)
 	{
 		switch (ui.key)
 		{
 		case KEY_ESCAPE: clear_search(); selected_annot = NULL; break;
-		case KEY_F1: showhelp = !showhelp; break;
+		case KEY_F1: ui.dialog = help_dialog; break;
 		case 'a': toggle_annotate(); break;
 		case 'o': toggle_outline(); break;
 		case 'L': showlinks = !showlinks; break;
@@ -1107,6 +1197,10 @@ static void do_app(void)
 		case 'i': showinfo = !showinfo; break;
 		case 'r': reload(); break;
 		case 'q': glutLeaveMainLoop(); break;
+		case 'S': do_save_pdf_file(); break;
+
+		case '>': layout_em = number > 0 ? number : layout_em + 1; relayout(); break;
+		case '<': layout_em = number > 0 ? number : layout_em - 1; relayout(); break;
 
 		case 'C': currenttint = !currenttint; break;
 		case 'I': currentinvert = !currentinvert; break;
@@ -1131,8 +1225,6 @@ static void do_app(void)
 		case ' ': number = fz_maxi(number, 1); while (number--) smart_move_forward(); break;
 		case ',': case KEY_PAGE_UP: currentpage -= fz_maxi(number, 1); break;
 		case '.': case KEY_PAGE_DOWN: currentpage += fz_maxi(number, 1); break;
-		case '<': currentpage -= 10 * fz_maxi(number, 1); break;
-		case '>': currentpage += 10 * fz_maxi(number, 1); break;
 		case 'g': jump_to_page(number - 1); break;
 		case 'G': jump_to_page(fz_count_pages(ctx, doc) - 1); break;
 
@@ -1280,73 +1372,6 @@ static void do_info(void)
 	}
 	ui_label("ICC rendering: %s.", currenticc ? "on" : "off");
 	ui_label("Spot rendering: %s.", currentseparations ? "on" : "off");
-
-	ui_dialog_end();
-}
-
-static void do_help_line(char *label, char *text)
-{
-	ui_panel_begin(0, ui.lineheight, 0, 0, 0);
-	{
-		ui_layout(L, NONE, W, 0, 0);
-		ui_panel_begin(150, ui.lineheight, 0, 0, 0);
-		ui_layout(R, NONE, W, 20, 0);
-		ui_label("%s", label);
-		ui_panel_end();
-
-		ui_layout(ALL, X, W, 0, 0);
-		ui_panel_begin(0, ui.lineheight, 0, 0, 0);
-		ui_label("%s", text);
-		ui_panel_end();
-	}
-	ui_panel_end();
-}
-
-static void do_help(void)
-{
-	ui_dialog_begin(500, 38 * ui.lineheight);
-	ui_layout(T, X, W, 0, 0);
-
-	do_help_line("MuPDF", FZ_VERSION);
-	ui_spacer();
-	do_help_line("F1", "show this message");
-	do_help_line("i", "show document information");
-	do_help_line("o", "show/hide outline");
-	do_help_line("a", "show/hide annotation editor");
-	do_help_line("L", "show/hide links");
-	do_help_line("F", "show/hide form fields");
-	do_help_line("r", "reload file");
-	do_help_line("q", "quit");
-	ui_spacer();
-	do_help_line("I", "toggle inverted color mode");
-	do_help_line("C", "toggle tinted color mode");
-	do_help_line("e", "enable/disable spot color mode");
-	do_help_line("f", "fullscreen window");
-	do_help_line("w", "shrink wrap window");
-	do_help_line("W or H", "fit to width or height");
-	do_help_line("Z", "fit to page");
-	do_help_line("z", "reset zoom");
-	do_help_line("N z", "set zoom to N");
-	do_help_line("+ or -", "zoom in or out");
-	do_help_line("[ or ]", "rotate left or right");
-	do_help_line("arrow keys", "pan in small increments");
-	ui_spacer();
-	do_help_line("b", "smart move backward");
-	do_help_line("Space", "smart move forward");
-	do_help_line(", or PgUp", "go backward");
-	do_help_line(". or PgDn", "go forward");
-	do_help_line("<", "go backward 10 pages");
-	do_help_line(">", "go forward 10 pages");
-	do_help_line("N g", "go to page N");
-	do_help_line("G", "go to last page");
-	ui_spacer();
-	do_help_line("t", "go backward in history");
-	do_help_line("T", "go forward in history");
-	do_help_line("N m", "save location in bookmark N");
-	do_help_line("N t", "go to bookmark N");
-	ui_spacer();
-	do_help_line("/ or ?", "search for text");
-	do_help_line("n or N", "repeat search");
 
 	ui_dialog_end();
 }
@@ -1564,8 +1589,6 @@ void do_main(void)
 
 	if (showinfo)
 		do_info();
-	else if (showhelp)
-		do_help();
 }
 
 void run_main_loop(void)
