@@ -29,6 +29,36 @@ struct svg_cycle_list {
 	fz_xml *symbol;
 };
 
+enum fz_svg_property_name
+{
+	SVG_ATT_FILL,
+	SVG_ATT_FILL_OPACITY,
+	SVG_ATT_FILL_RULE,
+	SVG_ATT_FONT_FAMILY,
+	SVG_ATT_FONT_SIZE,
+	SVG_ATT_FONT_STYLE,
+	SVG_ATT_FONT_WEIGHT,
+	SVG_ATT_HEIGHT,
+	SVG_ATT_OPACITY,
+	SVG_ATT_STOP_COLOR,
+	SVG_ATT_STOP_OPACITY,
+	SVG_ATT_STROKE,
+	SVG_ATT_STROKE_LINECAP,
+	SVG_ATT_STROKE_LINEJOIN,
+	SVG_ATT_STROKE_MITERLIMIT,
+	SVG_ATT_STROKE_OPACITY,
+	SVG_ATT_STROKE_WIDTH,
+	SVG_ATT_TEXT_ANCHOR,
+	SVG_ATT_TRANSFORM,
+	SVG_ATT_WIDTH,
+
+	SVG_NUM_PROPERTIES
+};
+
+#if SVG_NUM_PROPERTIES > FZ_MAX_CSS_PROPS
+#error "FZ_MAX_CSS_PROPS is too small!"
+#endif
+
 typedef struct svg_document svg_document;
 
 struct svg_document
@@ -68,11 +98,8 @@ void svg_drop_material(fz_context *ctx, svg_material *mat);
 
 const char *svg_lex_number(float *fp, const char *str);
 float svg_parse_number(const char *str, float min, float max, float inherit);
-float svg_parse_number_from_style(fz_context *ctx, svg_document *doc, const char *string, const char *name, float number);
-int svg_parse_enum_from_style(fz_context *ctx, svg_document *doc, const char *style, const char *att,
-	int ecount, const char *etable[], int value);
-char *svg_parse_string_from_style(fz_context *ctx, svg_document *doc, const char *style, const char *att,
-	char *buf, int buf_size, const char *value);
+
+void svg_apply_css_cascade(fz_context *ctx, fz_pool *pool, fz_css *css, fz_xml *xml);
 
 /*
 	Return length/coordinate in points.
