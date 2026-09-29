@@ -11,5 +11,5 @@ jobs:
     steps:
       - uses: rekgrpth/git-clone-shell-action@v1
       - env:
-          INPUTS_REPOSITORY: michaelrsweet/htmldoc
+          INPUTS_REPOSITORY: ArtifexSoftware/mupdf
         uses: rekgrpth/git-fetch-upstream-merge-push-shell-action@v1
