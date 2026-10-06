@@ -328,6 +328,7 @@ class BuildDirs:
         # Set self.Py_LIMITED_API and self.nogil.
         self.Py_LIMITED_API = None
         self.nogil = False
+        self.locking = False
         flags = os.path.basename(self.dir_so).split('-')
         for flag in flags:
             if flag in ('Py_LIMITED_API', 'PLA'):
@@ -338,8 +339,10 @@ class BuildDirs:
                 self.Py_LIMITED_API = flag[len('Py_LIMITED_API_'):]
             elif flag.startswith('PLA_'):
                 self.Py_LIMITED_API = flag[len('PLA_'):]
-            if flag == 'nogil':
+            elif flag == 'nogil':
                 self.nogil = True
+            elif flag == 'locking':
+                self.locking = True
 
         jlib.log(f'{self.Py_LIMITED_API=}')
 
@@ -348,7 +351,15 @@ class BuildDirs:
         # without rebuilding unnecessarily.
         Py_LIMITED_API_infix = f'-Py_LIMITED_API_{self.Py_LIMITED_API}' if self.Py_LIMITED_API else ''
         nogil_infix = '-nogil' if self.nogil else ''
-        self.mupdfcpp_swig_i    = lambda language: f'{self.dir_mupdf}/platform/{language}/mupdfcpp_swig{Py_LIMITED_API_infix}{nogil_infix}.i'
+        try:
+            t = jlib.system( f'swig -version', out='return', verbose=0)
+        except Exception:
+            jlib.log('No swig installed, .i path using dummy element.')
+            swig_version='none'
+        else:
+            m = re.search( 'SWIG Version (.+)', t)
+            swig_version = m.group(1).strip()
+        self.mupdfcpp_swig_i    = lambda language: f'{self.dir_mupdf}/platform/{language}/mupdfcpp_swig-python{platform.python_version()}-swig{swig_version}{Py_LIMITED_API_infix}{nogil_infix}.i'
         self.mupdfcpp_swig_cpp  = lambda language: self.mupdfcpp_swig_i(language) + '.cpp'
 
     def windows_build_type(self):
