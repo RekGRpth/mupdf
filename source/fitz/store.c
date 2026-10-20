@@ -502,6 +502,7 @@ fz_store_item(fz_context *ctx, void *key, void *val_, size_t itemsize, const fz_
 		{
 			/* There was one there already! Take a new reference
 			 * to the existing one, and drop our current one. */
+			fz_storable *existing_val;
 			fz_warn(ctx, "found duplicate %s in the store", type->name);
 			touch(store, existing);
 			if (existing->val->refs > 0)
@@ -509,10 +510,14 @@ fz_store_item(fz_context *ctx, void *key, void *val_, size_t itemsize, const fz_
 				(void)Memento_takeRef(existing->val);
 				existing->val->refs++;
 			}
+			/* Read existing_val while still locked. val is now protected by
+			 * our reference. existing is not, so item could be freed before
+			 * we return. */
+			existing_val = existing->val;
 			fz_unlock(ctx, FZ_LOCK_ALLOC);
 			fz_free(ctx, item);
 			type->drop_key(ctx, key);
-			return existing->val;
+			return (void *)existing_val;
 		}
 	}
 
@@ -523,11 +528,18 @@ fz_store_item(fz_context *ctx, void *key, void *val_, size_t itemsize, const fz_
 		val->refs++;
 	}
 
+	/* It's in the store now, as the moment we unlock below it could be found from the
+	 * hash table. */
+	store->size += itemsize;
+
+	/* Regardless of whether it's indexed, it goes into the linked list */
+	touch(store, item);
+
 	/* If we haven't got an infinite store, check for space within it */
 	if (store->max != FZ_STORE_UNLIMITED)
 	{
 		/* FIXME: Overflow? */
-		size = store->size + itemsize;
+		size = store->size;
 		if (size > store->max)
 		{
 			FZ_LOG_STORE(ctx, "Store size exceeded: item=%zu, size=%zu, max=%zu\n",
@@ -542,7 +554,7 @@ fz_store_item(fz_context *ctx, void *key, void *val_, size_t itemsize, const fz_
 					do_reap(ctx); /* Drops alloc lock */
 					fz_lock(ctx, FZ_LOCK_ALLOC);
 				}
-				size = store->size + itemsize;
+				size = store->size;
 				if (size <= store->max)
 					break;
 
@@ -567,10 +579,6 @@ fz_store_item(fz_context *ctx, void *key, void *val_, size_t itemsize, const fz_
 			FZ_LOG_DUMP_STORE(ctx, "After eviction:\n");
 		}
 	}
-	store->size += itemsize;
-
-	/* Regardless of whether it's indexed, it goes into the linked list */
-	touch(store, item);
 	fz_unlock(ctx, FZ_LOCK_ALLOC);
 
 	return NULL;
@@ -617,6 +625,7 @@ fz_find_item(fz_context *ctx, fz_store_drop_fn *drop, void *key, const fz_store_
 		 * picked up from the hash before it has made it into the
 		 * linked list does not get whipped out again due to the
 		 * store being full. */
+		fz_storable *item_val;
 		touch(store, item);
 		/* And bump the refcount before returning */
 		if (item->val->refs > 0)
@@ -624,8 +633,12 @@ fz_find_item(fz_context *ctx, fz_store_drop_fn *drop, void *key, const fz_store_
 			(void)Memento_takeRef(item->val);
 			item->val->refs++;
 		}
+		/* Read item_val while still locked. val is now protected by
+		 * our reference. item is not, so item could be freed before
+		 * we return. */
+		item_val = item->val;
 		fz_unlock(ctx, FZ_LOCK_ALLOC);
-		return (void *)item->val;
+		return (void *)item_val;
 	}
 	fz_unlock(ctx, FZ_LOCK_ALLOC);
 
