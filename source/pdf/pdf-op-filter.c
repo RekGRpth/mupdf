@@ -373,7 +373,7 @@ static void filter_flush(fz_context *ctx, pdf_sanitize_processor *p, int flush)
 		}
 		if (gstate->pending.cs.cs == fz_device_rgb(ctx) && !gstate->pending.sc.pat && !gstate->pending.sc.shd && gstate->pending.sc.n == 3 &&
 			(gstate->sent.cs.cs != fz_device_rgb(ctx) || gstate->sent.sc.pat || gstate->sent.sc.shd || gstate->sent.sc.n != 3 || gstate->pending.sc.c[0] != gstate->sent.sc.c[0] ||
-				gstate->pending.sc.c[1] != gstate->sent.sc.c[1] || gstate->pending.sc.c[1] != gstate->sent.sc.c[1]))
+				gstate->pending.sc.c[1] != gstate->sent.sc.c[1] || gstate->pending.sc.c[2] != gstate->sent.sc.c[2]))
 		{
 			gstate = ensure_pushed(ctx, p);
 			if (p->super.chain->op_rg)
@@ -395,6 +395,7 @@ static void filter_flush(fz_context *ctx, pdf_sanitize_processor *p, int flush)
 			gstate = ensure_pushed(ctx, p);
 			if (p->super.chain->op_cs)
 				p->super.chain->op_cs(ctx, p->super.chain, gstate->pending.cs.name, gstate->pending.cs.cs);
+			gstate->sent.sc.n = 0;
 		}
 
 		/* pattern or shading */
@@ -458,7 +459,7 @@ done_sc:
 		}
 		if (gstate->pending.CS.cs == fz_device_rgb(ctx) && !gstate->pending.SC.pat && !gstate->pending.SC.shd && gstate->pending.SC.n == 3 &&
 			(gstate->sent.CS.cs != fz_device_rgb(ctx) || gstate->sent.SC.pat || gstate->sent.SC.shd || gstate->sent.SC.n != 3 || gstate->pending.SC.c[0] != gstate->sent.SC.c[0] ||
-				gstate->pending.SC.c[1] != gstate->sent.SC.c[1] || gstate->pending.SC.c[1] != gstate->sent.SC.c[1]))
+				gstate->pending.SC.c[1] != gstate->sent.SC.c[1] || gstate->pending.SC.c[2] != gstate->sent.SC.c[2]))
 		{
 			gstate = ensure_pushed(ctx, p);
 			if (p->super.chain->op_RG)
@@ -480,6 +481,7 @@ done_sc:
 			gstate = ensure_pushed(ctx, p);
 			if (p->super.chain->op_CS)
 				p->super.chain->op_CS(ctx, p->super.chain, gstate->pending.CS.name, gstate->pending.CS.cs);
+			gstate->sent.SC.n = 0;
 		}
 
 		/* pattern or shading */
@@ -608,7 +610,7 @@ done_SC:
 				gstate->pending.text.fontname != gstate->sent.text.fontname)
 			{
 				gstate = ensure_pushed(ctx, p);
-				if (p->super.chain->op_Tf)
+				if (gstate->pending.text.fontname != NULL && p->super.chain->op_Tf)
 					p->super.chain->op_Tf(ctx, p->super.chain, fz_cstring_from_string(gstate->pending.text.fontname), gstate->pending.text.font, gstate->pending.text.size);
 			}
 			if (gstate->pending.text.render != gstate->sent.text.render)
@@ -1056,7 +1058,7 @@ segment_to_array(fz_context *ctx, pdf_sanitize_processor *p, unsigned char *seg,
 		float ty = scale * (X * -p->tos.tm.b + Y * p->tos.tm.a);
 		if (p->tos.fontdesc->wmode == 0)
 		{
-			adjust = tx * p->gstate->pending.text.scale;
+			adjust = tx / p->gstate->pending.text.scale;
 			assert(fabs(ty) < 0.001);
 		}
 		else
@@ -1726,22 +1728,32 @@ cull_path(fz_context *ctx, pdf_sanitize_processor *p, int type, int flush)
 	fz_catch(ctx)
 		fz_rethrow(ctx);
 
-	if (sd.any_sent != 0 && p->gstate->clip_op != NO_CLIP_OP)
+	if (p->gstate->clip_op != NO_CLIP_OP)
 	{
-		fz_rect r;
-
-		/* ctm has always been flushed by now. */
-		r = fz_bound_path(ctx, p->path, NULL, p->gstate->sent.ctm);
-		p->gstate->clip_rect = fz_intersect_rect(p->gstate->clip_rect, r);
-		if (p->gstate->clip_op == CLIP_W)
+		if (sd.any_sent != 0)
 		{
-			if (p->super.chain->op_W)
-				p->super.chain->op_W(ctx, p->super.chain);
+			fz_rect r;
+
+			/* ctm has always been flushed by now. */
+			r = fz_bound_path(ctx, p->path, NULL, p->gstate->sent.ctm);
+			p->gstate->clip_rect = fz_intersect_rect(p->gstate->clip_rect, r);
+			if (p->gstate->clip_op == CLIP_W)
+			{
+				if (p->super.chain->op_W)
+					p->super.chain->op_W(ctx, p->super.chain);
+			}
+			else
+			{
+				if (p->super.chain->op_Wstar)
+					p->super.chain->op_Wstar(ctx, p->super.chain);
+			}
 		}
 		else
 		{
-			if (p->super.chain->op_Wstar)
-				p->super.chain->op_Wstar(ctx, p->super.chain);
+			/* The path was a clip path, and it's been completely removed.
+			 * This means that we need to drop any content that would have
+			 * been clipped by it. */
+			p->gstate->clip_rect = fz_empty_rect;
 		}
 		p->gstate->clip_op = NO_CLIP_OP;
 	}
