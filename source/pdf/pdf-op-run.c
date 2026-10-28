@@ -965,6 +965,10 @@ pdf_show_path(fz_context *ctx, pdf_run_processor *pr, int doclose, int dofill, i
 	softmask_save softmask = { NULL };
 	int knockout_group = 0;
 
+	path = pr->path;
+	if (fz_path_is_empty(ctx, path))
+		return;
+
 	pop_any_pending_mcid_changes(ctx, pr);
 	flush_begin_layer(ctx, pr);
 
@@ -981,7 +985,7 @@ pdf_show_path(fz_context *ctx, pdf_run_processor *pr, int doclose, int dofill, i
 			pr->dev->flags |= FZ_DEVFLAG_UNCACHEABLE;
 	}
 
-	path = pr->path;
+
 	pr->path = fz_new_path(ctx);
 
 	fz_try(ctx)
@@ -3240,7 +3244,7 @@ static void pdf_run_rg(fz_context *ctx, pdf_processor *proc, float r, float g, f
 
 /* shadings, images, xobjects */
 
-static void pdf_run_BI(fz_context *ctx, pdf_processor *proc, fz_image *image, const char *colorspace)
+static void pdf_run_BI(fz_context *ctx, pdf_processor *proc, fz_image *image, const char *colorspace, int cs_is_inline)
 {
 	pdf_run_processor *pr = (pdf_run_processor *)proc;
 	pdf_show_image(ctx, pr, image);
