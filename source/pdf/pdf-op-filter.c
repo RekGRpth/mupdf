@@ -28,6 +28,8 @@
 #include <string.h>
 
 #define UNSET_SCALE -999999999.f
+#define UNSET_LINECAP ((fz_linecap)-1)
+#define UNSET_LINEJOIN ((fz_linejoin)-1)
 
 typedef enum
 {
@@ -90,8 +92,6 @@ typedef struct filter_gstate
 	fz_rect clip_rect;
 	pdf_filter_gstate pending;
 	pdf_filter_gstate sent;
-	/* The current leading value that the caller assumes. */
-	float leading;
 	/* Opacity values are not queued, so don't go into pending/sent.
 	 * We only track these for invisible text removal. */
 	float ca;
@@ -144,6 +144,8 @@ typedef struct
 	pdf_filter_options *global_options;
 	fz_path *path;
 	clip_op_t clip_op;
+	int next_image_resource_idx;
+	int next_form_resource_idx;
 } pdf_sanitize_processor;
 
 static void
@@ -177,17 +179,20 @@ add_resource(fz_context *ctx, pdf_sanitize_processor *p, pdf_obj *key, const cha
 }
 
 static void
-create_resource_name(fz_context *ctx, pdf_sanitize_processor *p, pdf_obj *key, const char *prefix, char *buf, int len)
+create_resource_name(fz_context *ctx, pdf_sanitize_processor *p, pdf_obj *key, const char *prefix, char *buf, int len, int *idx)
 {
 	int i;
 	pdf_obj *res = pdf_dict_get(ctx, p->new_rstack->resources, key);
 	if (!res)
 		res = pdf_dict_put_dict(ctx, p->new_rstack->resources, key, 8);
-	for (i = 1; i < 65536; ++i)
+	for (i = *idx; i < 65536; ++i)
 	{
 		fz_snprintf(buf, len, "%s%d", prefix, i);
 		if (!pdf_dict_gets(ctx, res, buf))
+		{
+			*idx = i+1;
 			return;
+		}
 	}
 	fz_throw(ctx, FZ_ERROR_LIMIT, "Cannot create unique resource name");
 }
@@ -537,13 +542,13 @@ done_SC:
 
 	if (flush & FLUSH_STROKE_STATE)
 	{
-		if (gstate->pending.stroke.linecap != gstate->sent.stroke.linecap && gstate->pending.stroke.linecap != -1)
+		if (gstate->pending.stroke.linecap != gstate->sent.stroke.linecap && gstate->pending.stroke.linecap != UNSET_LINECAP)
 		{
 			gstate = ensure_pushed(ctx, p);
 			if (p->super.chain->op_J)
 				p->super.chain->op_J(ctx, p->super.chain, gstate->pending.stroke.linecap);
 		}
-		if (gstate->pending.stroke.linejoin != gstate->sent.stroke.linejoin && gstate->pending.stroke.linejoin != -1)
+		if (gstate->pending.stroke.linejoin != gstate->sent.stroke.linejoin && gstate->pending.stroke.linejoin != UNSET_LINEJOIN)
 		{
 			gstate = ensure_pushed(ctx, p);
 			if (p->super.chain->op_j)
@@ -2143,7 +2148,6 @@ pdf_filter_TL(fz_context *ctx, pdf_processor *proc, float leading)
 	implicit_bt(ctx, p);
 
 	filter_flush(ctx, p, FLUSH_OP);
-	p->gstate->leading = leading;
 	p->gstate->pending.text.leading = leading;
 }
 
@@ -2219,7 +2223,7 @@ pdf_filter_TD(fz_context *ctx, pdf_processor *proc, float tx, float ty)
 
 	implicit_bt(ctx, p);
 
-	p->gstate->leading = -ty;
+	p->gstate->pending.text.leading = -ty;
 	pdf_filter_Td(ctx, proc, tx, ty);
 }
 
@@ -2248,7 +2252,7 @@ pdf_filter_Tstar(fz_context *ctx, pdf_processor *proc)
 	implicit_bt(ctx, p);
 
 	filter_flush(ctx, p, FLUSH_OP);
-	pdf_tos_newline(&p->tos, p->gstate->leading);
+	pdf_tos_newline(&p->tos, p->gstate->pending.text.leading);
 }
 
 /* text showing */
@@ -2705,7 +2709,7 @@ pdf_filter_Do_image(fz_context *ctx, pdf_processor *proc, const char *name, fz_i
 				/* Make up a unique name when instancing forms so we don't accidentally clash. */
 				char buf[40];
 				pdf_obj *obj = pdf_lookup_resource(ctx, proc->rstack, PDF_NAME(XObject), name);
-				create_resource_name(ctx, p, PDF_NAME(XObject), "Im", buf, sizeof buf);
+				create_resource_name(ctx, p, PDF_NAME(XObject), "Im", buf, sizeof buf, &p->next_image_resource_idx);
 				add_resource(ctx, p, PDF_NAME(XObject), buf, obj);
 				p->super.chain->op_Do_image(ctx, p->super.chain, buf, image);
 			}
@@ -2722,7 +2726,7 @@ pdf_filter_Do_image(fz_context *ctx, pdf_processor *proc, const char *name, fz_i
 			fz_try(ctx)
 			{
 				char buf[40];
-				create_resource_name(ctx, p, PDF_NAME(XObject), "Im", buf, sizeof buf);
+				create_resource_name(ctx, p, PDF_NAME(XObject), "Im", buf, sizeof buf, &p->next_image_resource_idx);
 				obj = pdf_add_image(ctx, p->doc, new_image);
 				add_resource(ctx, p, PDF_NAME(XObject), buf, obj);
 				p->super.chain->op_Do_image(ctx, p->super.chain, buf, new_image);
@@ -2747,15 +2751,18 @@ pdf_filter_Do_form(fz_context *ctx, pdf_processor *proc, const char *name, pdf_o
 	if (fz_is_empty_rect(p->gstate->clip_rect))
 		return;
 
-	filter_flush(ctx, p, FLUSH_ALL);
+	filter_flush(ctx, p, FLUSH_ALL | FLUSH_STROKE_STATE);
 
 	if (p->global_options->instance_forms)
 	{
 		/* Copy an instance of the form with a new unique name. */
 		pdf_obj *new_xobj;
 		char buf[40];
-		create_resource_name(ctx, p, PDF_NAME(XObject), "Fm", buf, sizeof buf);
+		int form_idx, image_idx;
+		create_resource_name(ctx, p, PDF_NAME(XObject), "Fm", buf, sizeof buf, &p->next_form_resource_idx);
 		transform = fz_concat(p->gstate->sent.ctm, p->transform);
+		form_idx = p->next_form_resource_idx;
+		image_idx = p->next_image_resource_idx;
 		new_xobj = pdf_filter_xobject_instance(ctx, xobj, p->new_rstack->resources, transform, p->global_options, NULL);
 		fz_try(ctx)
 		{
@@ -2764,7 +2771,11 @@ pdf_filter_Do_form(fz_context *ctx, pdf_processor *proc, const char *name, pdf_o
 				p->super.chain->op_Do_form(ctx, p->super.chain, buf, new_xobj);
 		}
 		fz_always(ctx)
+		{
 			pdf_drop_obj(ctx, new_xobj);
+			p->next_form_resource_idx = form_idx;
+			p->next_image_resource_idx = image_idx;
+		}
 		fz_catch(ctx)
 			fz_rethrow(ctx);
 	}
@@ -3019,6 +3030,8 @@ pdf_reset_sanitize_processor(fz_context *ctx, pdf_processor *proc)
 	pdf_sanitize_processor *p = (pdf_sanitize_processor*)proc;
 
 	pdf_reset_processor(ctx, p->super.chain);
+	p->next_image_resource_idx = 0;
+	p->next_form_resource_idx = 0;
 }
 
 pdf_processor *
@@ -3178,16 +3191,16 @@ pdf_new_sanitize_filter(
 		proc->gstate->sent.ctm = fz_identity;
 		proc->gstate->pending.text.scale = UNSET_SCALE;
 		proc->gstate->pending.text.size = -1;
-		proc->gstate->pending.stroke.linecap = -1;
-		proc->gstate->pending.stroke.linejoin = -1;
+		proc->gstate->pending.stroke.linecap = UNSET_LINECAP;
+		proc->gstate->pending.stroke.linejoin = UNSET_LINEJOIN;
 		proc->gstate->pending.stroke.linewidth = -1;
 		proc->gstate->pending.stroke.miterlimit = -1;
 		proc->gstate->sent.text.scale = UNSET_SCALE;
 		proc->gstate->sent.text.size = -1;
 		proc->gstate->sent.stroke.linewidth = -1;
 		proc->gstate->sent.stroke.miterlimit = -1;
-		proc->gstate->sent.stroke.linecap = -1;
-		proc->gstate->sent.stroke.linejoin = -1;
+		proc->gstate->sent.stroke.linecap = UNSET_LINECAP;
+		proc->gstate->sent.stroke.linejoin = UNSET_LINEJOIN;
 		proc->gstate->clip_rect = fz_infinite_rect;
 		proc->gstate->ca = 1;
 		proc->gstate->CA = 1;
