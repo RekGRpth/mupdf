@@ -452,15 +452,108 @@ $(OUT)/storytest: docs/examples/storytest.c $(MUPDF_LIB) $(THIRD_LIB)
 $(OUT)/searchtest: docs/examples/searchtest.c $(MUPDF_LIB) $(THIRD_LIB)
 	$(LINK_CMD) $(CFLAGS) $(THIRD_LIBS)
 
-# --- Format man pages ---
+# --- DOCUMENTATION ---
 
-%.txt: %.1
-	nroff -man $< | col -b | expand > $@
+# Auto-generated C reference docs from header files to Markdown and HTML.
+# Convert mutool man pages from Markdown format to HTML.
+# Convert Robin's "MuPDF Explored" book to HTML.
+# Convert Sphinx documentation to simpler HTML via Markdown and pandoc.
 
-MAN_FILES := $(sort $(wildcard docs/man/*.1))
-TXT_FILES := $(MAN_FILES:%.1=%.txt)
+DOCS_OUT := build/docs
 
-catman: $(TXT_FILES)
+# Use pandoc to convert Markdown to HTML:
+
+$(DOCS_OUT)/%.html: $(DOCS_OUT)/%.md scripts/docs/pandoc-template.html scripts/docs/pandoc-filter.lua
+	$(QUIET_GEN) $(MKTGTDIR) ; pandoc --tab-stop=8 --from=markdown+gfm_auto_identifiers --template=scripts/docs/pandoc-template.html --lua-filter=scripts/docs/pandoc-filter.lua -V mupdf_version="$(shell sh scripts/show-version.sh)" -V mupdf_path=$(patsubst $(DOCS_OUT)/%,%,$@) -o $@ $<
+$(DOCS_OUT)/%.html: docs/%.md scripts/docs/pandoc-template.html scripts/docs/pandoc-filter.lua
+	$(QUIET_GEN) $(MKTGTDIR) ; pandoc --tab-stop=8 --from=markdown+gfm_auto_identifiers --template=scripts/docs/pandoc-template.html --lua-filter=scripts/docs/pandoc-filter.lua -V mupdf_version="$(shell sh scripts/show-version.sh)" -V mupdf_path=$(patsubst $(DOCS_OUT)/%,%,$@) -o $@ $<
+$(DOCS_OUT)/%.html: docs/%.adoc scripts/docs/pandoc-template.html scripts/docs/pandoc-filter.lua
+	$(QUIET_GEN) $(MKTGTDIR) ; pandoc --toc --tab-stop=8 --from=asciidoc --template=scripts/docs/pandoc-template.html --lua-filter=scripts/docs/pandoc-filter.lua -V mupdf_version="$(shell sh scripts/show-version.sh)" -V mupdf_path=$(patsubst $(DOCS_OUT)/%,%,$@) -o $@ $<
+
+# Copy images from docs to target directory:
+
+$(DOCS_OUT)/%.svg: docs/%.svg
+	$(QUIET_GEN) $(MKTGTDIR) ; cp -f $< $@
+$(DOCS_OUT)/%.png: docs/%.png
+	$(QUIET_GEN) $(MKTGTDIR) ; cp -f $< $@
+$(DOCS_OUT)/%.jpg: docs/%.jpg
+	$(QUIET_GEN) $(MKTGTDIR) ; cp -f $< $@
+$(DOCS_OUT)/%.webp: docs/%.webp
+	$(QUIET_GEN) $(MKTGTDIR) ; cp -f $< $@
+
+# Generate header file docs from headers:
+
+$(DOCS_OUT)/c/index.md: $(DOCS_H) scripts/docs/index.js
+	$(QUIET_GEN) $(MKTGTDIR) ; ctags -I fz_list -x --sort=yes --c-kinds=dfgpstux $(DOCS_H) | node scripts/docs/index.js $(SPHINX) > $@
+$(DOCS_OUT)/c/%.md: include/mupdf/%.h scripts/docs/header.js
+	$(QUIET_GEN) $(MKTGTDIR) ; ctags -I fz_list -x --sort=no --c-kinds=dfgpstux $< | node scripts/docs/header.js > $@
+
+DOCS_MD += $(DOCS_OUT)/c/index.md
+
+DOCS_H := $(wildcard include/mupdf/fitz/*.h include/mupdf/pdf/*.h)
+DOCS_H := $(filter-out include/mupdf/fitz/system.h, $(DOCS_H))
+DOCS_H := $(filter-out include/mupdf/fitz/export.h, $(DOCS_H))
+DOCS_H := $(filter-out include/mupdf/pdf/name-table.h, $(DOCS_H))
+DOCS_H := $(filter-out include/%-imp.h, $(DOCS_H))
+DOCS_MD += $(patsubst include/mupdf/%.h,$(DOCS_OUT)/c/%.md,$(DOCS_H))
+
+DOCS_HTML += $(patsubst %.md,%.html,$(DOCS_MD))
+
+# static docs and images
+DOCS_HTML += $(DOCS_OUT)/index.html
+DOCS_HTML += $(patsubst docs/%,$(DOCS_OUT)/%,$(shell find docs -type f -name '*.svg'))
+DOCS_HTML += $(patsubst docs/%,$(DOCS_OUT)/%,$(shell find docs -type f -name '*.webp'))
+DOCS_HTML += $(patsubst docs/%,$(DOCS_OUT)/%,$(shell find docs -type f -name '*.png'))
+DOCS_HTML += $(patsubst docs/%,$(DOCS_OUT)/%,$(shell find docs -type f -name '*.jpg'))
+
+# mupdf explored
+DOCS_HTML += $(patsubst docs/%.md,$(DOCS_OUT)/%.html,$(shell find docs/explored -type f -name '*.md'))
+DOCS_HTML += $(patsubst docs/%.adoc,$(DOCS_OUT)/%.html,$(shell find docs/explored -type f -name '*.adoc'))
+
+# generated sphinx docs
+DOCS_SPHINX_SRC := $(shell find docs -regex '.*\.\(md\|rst\)' | grep -v 'docs/explored\|docs/index.md')
+DOCS_SPHINX_DST := $(patsubst docs/%,$(DOCS_OUT)/sphinx/%,$(DOCS_SPHINX_SRC))
+DOCS_SPHINX_DST := $(patsubst %.rst,%.md,$(DOCS_SPHINX_DST))
+
+$(DOCS_SPHINX_DST) &: $(DOCS_SPHINX_SRC)
+	bash scripts/sphinx/build-markdown.sh
+
+DOCS_HTML += $(patsubst %.md,%.html,$(DOCS_SPHINX_DST))
+
+docs: $(DOCS_MD) $(DOCS_HTML)
+
+docs-clean: sphinx-clean
+	rm -rf build/docs
+
+# --- MAN PAGES ---
+
+build/man/%.1: docs/tools/%.md scripts/docs/options.man
+	$(QUIET_GEN) $(MKTGTDIR) ; sed -e '/^# /d' $< | pandoc --standalone=true --from=markdown --to=man --shift-heading-level-by=-1 -o $@
+
+DOCS_MAN += $(patsubst docs/tools/%.md,build/man/%.1,$(shell find docs/tools -type f -name '*.md'))
+
+build/man/mutool-stext-options.1: docs/reference/common/stext-options.md
+	$(QUIET_GEN) $(MKTGTDIR) ; sed -e '/^# /d' $< | pandoc --template=scripts/docs/options.man --from=markdown --to=man -o $@
+build/man/mutool-docwriter-options.1: docs/reference/common/document-writer-options.md
+	$(QUIET_GEN) $(MKTGTDIR) ; sed -e '/^# /d' $< | pandoc --template=scripts/docs/options.man --from=markdown --to=man -o $@
+build/man/mutool-pdfwrite-options.1: docs/reference/common/pdf-write-options.md
+	$(QUIET_GEN) $(MKTGTDIR) ; sed -e '/^# /d' $< | pandoc --template=scripts/docs/options.man --from=markdown --to=man -o $@
+build/man/mutool-search-options.1: docs/reference/common/search-options.md
+	$(QUIET_GEN) $(MKTGTDIR) ; sed -e '/^# /d' $< | pandoc --template=scripts/docs/options.man --from=markdown --to=man -o $@
+build/man/mutool-tablehunt-options.1: docs/reference/common/table-hunt-options.md
+	$(QUIET_GEN) $(MKTGTDIR) ; sed -e '/^# /d' $< | pandoc --template=scripts/docs/options.man --from=markdown --to=man -o $@
+build/man/mutool-option-strings.1: docs/reference/common/option-strings.md
+	$(QUIET_GEN) $(MKTGTDIR) ; sed -e '/^# /d' $< | pandoc --template=scripts/docs/options.man --from=markdown --to=man -o $@
+
+DOCS_MAN += build/man/mutool-stext-options.1
+DOCS_MAN += build/man/mutool-pdfwrite-options.1
+DOCS_MAN += build/man/mutool-docwriter-options.1
+DOCS_MAN += build/man/mutool-search-options.1
+DOCS_MAN += build/man/mutool-stext-options.1
+DOCS_MAN += build/man/mutool-tablehunt-options.1
+DOCS_MAN += build/man/mutool-option-strings.1
+
+man: $(DOCS_MAN)
 
 # --- Install ---
 
@@ -515,28 +608,24 @@ install-extra-apps: install-apps extra-apps
 	install -d $(DESTDIR)$(bindir)
 	install -m 755 $(EXTRA_TOOL_APPS) $(EXTRA_VIEW_APPS) $(DESTDIR)$(bindir)
 
-install-docs:
+install-docs: man docs
 	install -d $(DESTDIR)$(mandir)/man1
-	install -m 644 docs/man/*.1 $(DESTDIR)$(mandir)/man1
+	install -m 644 build/man/*.1 $(DESTDIR)$(mandir)/man1
 	install -d $(DESTDIR)$(docdir)
-	install -d $(DESTDIR)$(docdir)/examples
 	install -m 644 README CHANGES $(DESTDIR)$(docdir)
 	install -m 644 $(wildcard COPYING LICENSE) $(DESTDIR)$(docdir)
-	install -m 644 docs/examples/* $(DESTDIR)$(docdir)/examples
+	cp -prf build/docs/* $(DESTDIR)$(docdir)
 
 install: install-libs install-apps install-docs
 
-docs:
-	bash scripts/build-docs.sh
+sphinx:
+	bash scripts/sphinx/build-html.sh
 
-docs-live:
-	bash scripts/build-docs-live.sh
+sphinx-live:
+	bash scripts/sphinx/build-html-live.sh
 
-docs-markdown:
-	bash scripts/build-docs-markdown.sh
-
-docs-clean:
-	rm -rf build/docs
+sphinx-clean:
+	rm -rf build/sphinx-html
 	rm -rf build/sphinx-venv
 	rm -rf build/sphinx-doctrees
 
@@ -594,7 +683,7 @@ all: libs apps extra-apps
 clean:
 	rm -rf $(OUT)
 nuke:
-	rm -rf build/*
+	rm -rf build
 	rm -rf generated/resources/fonts/droid
 	rm -rf generated/resources/fonts/han
 	rm -rf generated/resources/fonts/noto

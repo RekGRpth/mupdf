@@ -1,8 +1,8 @@
-Javascript Library
-==================
+Javascript Reference
+====================
 
 .. toctree::
-	:maxdepth: 1
+	:maxdepth: 2
 
 	introduction
 	functions

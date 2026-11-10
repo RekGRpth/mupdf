@@ -7,16 +7,9 @@ import subprocess
 from pathlib import Path
 import sys
 
-# Build the C API docs with mupdfwrap.py and put them in _static/generated
-script_path = Path(__file__).parent.parent / "scripts/mupdfwrap.py"
-
-process = subprocess.run([sys.executable, str(script_path), "--venv", "-b", "02", "--doc", "c", "--sync-docs", "_static/generated"],
-        check=1, # raise exception if command fails.
-        )
-print("C Docs built with mupdfwrap.py, return code:", process.returncode)
-
 def get_mupdf_version_from_header():
 	major = minor = patch = None
+	# from scripts/sphinx/conf.py back up to top
 	_path = os.path.abspath(f'{__file__}/../../include/mupdf/fitz/version.h')
 	with open(_path) as f:
 		for line in f:
@@ -44,8 +37,12 @@ release = version = get_mupdf_version()
 
 extensions = [
 	"myst_parser",
-	"sphinx.ext.graphviz",
 	"sphinxcontrib.googleanalytics",
+]
+
+exclude_patterns = [
+	"index.md",
+	"explored/*",
 ]
 
 toc_object_entries_show_parents = "hide"
@@ -117,6 +114,13 @@ html_theme_options = {
 		},
 	],
 }
+
+# -- Options for Markdown output --------------------------------------------------
+
+markdown_anchor_sections = True
+markdown_anchor_signatures = True
+markdown_bullet = "-"
+markdown_flavor = "github"
 
 # -- Options for PDF output --------------------------------------------------
 

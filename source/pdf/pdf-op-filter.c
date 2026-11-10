@@ -1085,7 +1085,7 @@ segment_to_array(fz_context *ctx, pdf_sanitize_processor *p, unsigned char *seg,
 	}
 	else
 	{
-		assert("Shouldn't ever happen" == NULL);
+		fz_warn(ctx, "Text determinant zero - ignoring");
 	}
 	if (adjust != 0)
 		pdf_array_push_real(ctx, new_arr, -adjust * 1000 / p->gstate->pending.text.size);
@@ -1294,6 +1294,7 @@ static void
 pdf_filter_gs_begin(fz_context *ctx, pdf_processor *proc, const char *name, pdf_obj *extgstate)
 {
 	pdf_sanitize_processor *p = (pdf_sanitize_processor*)proc;
+	pdf_obj *obj;
 
 	if (fz_is_empty_rect(p->gstate->clip_rect))
 		return;
@@ -1302,6 +1303,71 @@ pdf_filter_gs_begin(fz_context *ctx, pdf_processor *proc, const char *name, pdf_
 	if (p->super.chain->op_gs_begin)
 		p->super.chain->op_gs_begin(ctx, p->super.chain, name, extgstate);
 	copy_resource(ctx, p, PDF_NAME(ExtGState), name);
+
+	obj = pdf_dict_get(ctx, extgstate, PDF_NAME(LW));
+	if (pdf_is_number(ctx, obj))
+		p->gstate->sent.stroke.linewidth = p->gstate->pending.stroke.linewidth = pdf_to_real(ctx, obj);
+
+	obj = pdf_dict_get(ctx, extgstate, PDF_NAME(LC));
+	if (pdf_is_number(ctx, obj))
+		p->gstate->sent.stroke.linecap = p->gstate->pending.stroke.linecap = fz_clampi(pdf_to_int(ctx, obj), 0, 2);
+
+	obj = pdf_dict_get(ctx, extgstate, PDF_NAME(LJ));
+	if (pdf_is_number(ctx, obj))
+		p->gstate->sent.stroke.linejoin = p->gstate->pending.stroke.linejoin = fz_clampi(pdf_to_int(ctx, obj), 0, 2);
+
+	obj = pdf_dict_get(ctx, extgstate, PDF_NAME(ML));
+	if (pdf_is_number(ctx, obj))
+		p->gstate->sent.stroke.miterlimit = p->gstate->pending.stroke.miterlimit = pdf_to_real(ctx, obj);
+
+	obj = pdf_dict_get(ctx, extgstate, PDF_NAME(D));
+	if (pdf_is_array(ctx, obj))
+	{
+		pdf_obj *dash_array = pdf_array_get(ctx, obj, 0);
+		pdf_obj *dash_phase = pdf_array_get(ctx, obj, 1);
+		p->gstate->sent.stroke.phase = p->gstate->pending.stroke.phase = pdf_to_real(ctx, dash_phase);
+		pdf_drop_obj(ctx, p->gstate->sent.stroke.dash);
+		pdf_drop_obj(ctx, p->gstate->pending.stroke.dash);
+		p->gstate->sent.stroke.dash = pdf_keep_obj(ctx, dash_array);
+		p->gstate->pending.stroke.dash = pdf_keep_obj(ctx, dash_array);
+	}
+
+	obj = pdf_dict_get(ctx, extgstate, PDF_NAME(CA));
+	if (pdf_is_number(ctx, obj))
+		p->gstate->CA = pdf_to_real(ctx, obj);
+
+	obj = pdf_dict_get(ctx, extgstate, PDF_NAME(ca));
+	if (pdf_is_number(ctx, obj))
+		p->gstate->ca = pdf_to_real(ctx, obj);
+
+	obj = pdf_dict_get(ctx, extgstate, PDF_NAME(Font));
+	if (pdf_is_array(ctx, obj))
+	{
+		pdf_obj *font_ref = pdf_array_get(ctx, obj, 0);
+		pdf_obj *font_size = pdf_array_get(ctx, obj, 1);
+		pdf_font_desc *font = pdf_try_load_font(ctx, p->doc, p->super.rstack, font_ref, NULL);
+
+		fz_try(ctx)
+		{
+			fz_drop_string(ctx, p->gstate->pending.text.fontname);
+			fz_drop_string(ctx, p->gstate->sent.text.fontname);
+			p->gstate->pending.text.fontname = NULL;
+			p->gstate->sent.text.fontname = NULL;
+			p->gstate->pending.text.fontname = name ? fz_new_string(ctx, name) : NULL;
+			p->gstate->sent.text.fontname = name ? fz_new_string(ctx, name) : NULL;
+			pdf_drop_font(ctx, p->gstate->pending.text.font);
+			pdf_drop_font(ctx, p->gstate->sent.text.font);
+			p->gstate->pending.text.font = pdf_keep_font(ctx, font);
+			p->gstate->sent.text.font = pdf_keep_font(ctx, font);
+			p->gstate->pending.text.size = pdf_to_real(ctx, font_size);
+			p->gstate->sent.text.size = pdf_to_real(ctx, font_size);
+		}
+		fz_always(ctx)
+			pdf_drop_font(ctx, font);
+		fz_catch(ctx)
+			fz_rethrow(ctx);
+
+	}
 }
 
 static void
@@ -1582,7 +1648,8 @@ end_segment(fz_context *ctx, segmenter_data_t *sd)
 	if (sd->segment == NULL)
 		return;
 
-	st = (sd->type == FZ_CULL_PATH_STROKE || sd->type == FZ_CULL_PATH_FILL_STROKE) ? sd->sstate : NULL;
+	st = (sd->type == FZ_CULL_PATH_STROKE || sd->type == FZ_CULL_PATH_FILL_STROKE ||
+			sd->type == FZ_CULL_CLIP_PATH_STROKE || sd->type == FZ_CULL_CLIP_PATH_FILL_STROKE) ? sd->sstate : NULL;
 	r = fz_bound_path(ctx, sd->segment, st, sd->ctm);
 
 	sd->last_segment_was_just_a_move_and_was_culled = 0;
@@ -2343,34 +2410,31 @@ pdf_filter_d1(fz_context *ctx, pdf_processor *proc, float wx, float wy, float ll
 /* color */
 
 static void
-set_default_cs_values(pdf_filter_gstate_sc *sc, const char *name, fz_colorspace *cs)
+set_default_cs_values(fz_context *ctx, pdf_filter_gstate_sc *sc, fz_colorspace *cs)
 {
 	int n = cs ? cs->n : 0;
 	int i;
-	if (strcmp(name, "Separation") == 0 || strcmp(name, "DeviceN") == 0) {
+
+	if (fz_colorspace_is_device_n(ctx, cs))
+	{
 		for (i = 0; i < n; ++i)
 			sc->c[i] = 1;
 	}
-	else if (strcmp(name, "DeviceGray") == 0 ||
-		strcmp(name, "DeviceRGB") == 0 ||
-		strcmp(name, "CalGray") == 0 ||
-		strcmp(name, "CalRGB") == 0 ||
-		strcmp(name, "Indexed") == 0)
-	{
-		for (i = 0; i < n; ++i)
-			sc->c[i] = 0;
-	}
-	else if (strcmp(name, "DeviceCMYK") == 0)
+	else if (fz_colorspace_is_device(ctx, cs) && fz_colorspace_is_cmyk(ctx, cs))
 	{
 		sc->c[0] = 0;
 		sc->c[1] = 0;
 		sc->c[2] = 0;
 		sc->c[3] = 1;
 	}
-	else if (strcmp(name, "Lab") == 0 ||
-		strcmp(name, "ICCBased") == 0)
+	else if (fz_colorspace_is_lab(ctx, cs) || fz_colorspace_is_icc(ctx, cs))
 	{
 		/* Really we should clamp c[i] to the appropriate range. */
+		for (i = 0; i < n; ++i)
+			sc->c[i] = 0;
+	}
+	else if (fz_colorspace_is_device(ctx, cs) || fz_colorspace_is_indexed(ctx, cs))
+	{
 		for (i = 0; i < n; ++i)
 			sc->c[i] = 0;
 	}
@@ -2395,7 +2459,7 @@ pdf_filter_CS(fz_context *ctx, pdf_processor *proc, const char *name, fz_colorsp
 	fz_drop_colorspace(ctx, gstate->pending.CS.cs);
 	gstate->pending.CS.cs = fz_keep_colorspace(ctx, cs);
 	copy_resource(ctx, p, PDF_NAME(ColorSpace), name);
-	set_default_cs_values(&gstate->pending.SC, name, cs);
+	set_default_cs_values(ctx, &gstate->pending.SC, cs);
 }
 
 static void
@@ -2411,7 +2475,7 @@ pdf_filter_cs(fz_context *ctx, pdf_processor *proc, const char *name, fz_colorsp
 	fz_drop_colorspace(ctx, gstate->pending.cs.cs);
 	gstate->pending.cs.cs = fz_keep_colorspace(ctx, cs);
 	copy_resource(ctx, p, PDF_NAME(ColorSpace), name);
-	set_default_cs_values(&gstate->pending.sc, name, cs);
+	set_default_cs_values(ctx, &gstate->pending.sc, cs);
 }
 
 static void
