@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2025 Artifex Software, Inc.
+// Copyright (C) 2004-2026 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -938,7 +938,7 @@ update_mcid(fz_context *ctx, pdf_sanitize_processor *p)
 	if (tag->alt.edited)
 		pdf_dict_put_text_string(ctx, tag->mcid_obj, PDF_NAME(Alt), tag->alt.utf8 ? tag->alt.utf8 : "");
 	if (tag->actualtext.edited)
-		pdf_dict_put_text_string(ctx, tag->mcid_obj, PDF_NAME(Alt), tag->actualtext.utf8 ? tag->actualtext.utf8 : "");
+		pdf_dict_put_text_string(ctx, tag->mcid_obj, PDF_NAME(ActualText), tag->actualtext.utf8 ? tag->actualtext.utf8 : "");
 }
 
 /* Process a string (from buf, of length len), from position *pos onwards.
@@ -1737,13 +1737,17 @@ cull_path(fz_context *ctx, pdf_sanitize_processor *p, int type, int flush, int *
 
 	if (type == FZ_CULL_PATH_STROKE || type == FZ_CULL_PATH_FILL_STROKE)
 	{
+		fz_linecap linecap = p->gstate->pending.stroke.linecap;
+		fz_linejoin linejoin = p->gstate->pending.stroke.linejoin;
+		float linewidth = p->gstate->pending.stroke.linewidth;
+		float miterlimit = p->gstate->pending.stroke.miterlimit;
 		sd.sstate = fz_new_stroke_state(ctx);
-		sd.sstate->start_cap = p->gstate->pending.stroke.linecap;
-		sd.sstate->dash_cap = p->gstate->pending.stroke.linecap;
-		sd.sstate->end_cap = p->gstate->pending.stroke.linecap;
-		sd.sstate->linejoin = p->gstate->pending.stroke.linejoin;
-		sd.sstate->linewidth = p->gstate->pending.stroke.linewidth;
-		sd.sstate->miterlimit = p->gstate->pending.stroke.miterlimit;
+		sd.sstate->start_cap = linecap == UNSET_LINECAP ? 0 : linecap;
+		sd.sstate->dash_cap = linecap == UNSET_LINECAP ? 0 : linecap;
+		sd.sstate->end_cap = linecap == UNSET_LINECAP ? 0 : linecap;
+		sd.sstate->linejoin = linejoin == UNSET_LINEJOIN ? 0 : linejoin;
+		sd.sstate->linewidth = linewidth == -1 ? 1 : linewidth;
+		sd.sstate->miterlimit = miterlimit == -1 ? 10 : miterlimit;
 		/* Ignore dash for now. */
 	}
 
@@ -2813,6 +2817,7 @@ pdf_filter_DP(fz_context *ctx, pdf_processor *proc, const char *tag, pdf_obj *ra
 	filter_flush(ctx, p, FLUSH_OP);
 	if (p->super.chain->op_DP)
 		p->super.chain->op_DP(ctx, p->super.chain, tag, raw, cooked);
+	copy_resource(ctx, p, PDF_NAME(Properties), pdf_to_name(ctx, raw));
 }
 
 static void
@@ -2851,7 +2856,7 @@ pdf_filter_BDC(fz_context *ctx, pdf_processor *proc, const char *tag, pdf_obj *r
 		bdc->bdc = 1;
 		bdc->tag = fz_strdup(ctx, tag);
 		bdc->raw = pdf_keep_obj(ctx, raw);
-		bdc->cooked = pdf_keep_obj(ctx, raw);
+		bdc->cooked = pdf_keep_obj(ctx, cooked);
 	}
 	fz_catch(ctx)
 	{
