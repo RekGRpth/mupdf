@@ -964,6 +964,7 @@ pdf_show_path(fz_context *ctx, pdf_run_processor *pr, int doclose, int dofill, i
 	fz_rect bbox;
 	softmask_save softmask = { NULL };
 	int knockout_group = 0;
+	int doclip;
 
 	path = pr->path;
 	if (fz_path_is_empty(ctx, path))
@@ -985,6 +986,8 @@ pdf_show_path(fz_context *ctx, pdf_run_processor *pr, int doclose, int dofill, i
 			pr->dev->flags |= FZ_DEVFLAG_UNCACHEABLE;
 	}
 
+	doclip = pr->clip;
+	pr->clip = 0;
 
 	pr->path = fz_new_path(ctx);
 
@@ -1096,12 +1099,11 @@ pdf_show_path(fz_context *ctx, pdf_run_processor *pr, int doclose, int dofill, i
 		if (dofill || dostroke)
 			pdf_end_group(ctx, pr, &softmask);
 
-		if (pr->clip)
+		if (doclip)
 		{
 			push_nest_clip(ctx, pr);
 			gstate->clip_depth++;
 			fz_clip_path(ctx, pr->dev, path, pr->clip_even_odd, gstate->ctm, bbox);
-			pr->clip = 0;
 		}
 	}
 	fz_always(ctx)
@@ -1319,7 +1321,7 @@ guess_bidi_level(int bidiclass, int cur_bidi)
 	case UCDN_BIDI_CLASS_ET:
 		return 0;
 	case UCDN_BIDI_CLASS_AN:
-		return 1;
+		return 0;
 	case UCDN_BIDI_CLASS_CS:
 	case UCDN_BIDI_CLASS_NSM:
 	case UCDN_BIDI_CLASS_BN:

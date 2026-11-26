@@ -2791,10 +2791,9 @@ pdf_dict_putl_drop(fz_context *ctx, pdf_obj *obj, pdf_obj *val, ...)
 const char *
 pdf_dict_put_unique(fz_context *ctx, pdf_obj *dict, const char *prefix, pdf_obj *val)
 {
-	// FIXME: Don't use Shlemiel the Painter algorithm for big dictionaries?
 	pdf_obj *key;
 	char buf[100];
-	int i = 1;
+	int i = pdf_dict_len(ctx, dict) + 1;
 	for (;;)
 	{
 		fz_snprintf(buf, sizeof buf, "%s%d", prefix, i);
@@ -2950,6 +2949,16 @@ pdf_unmark_obj(fz_context *ctx, pdf_obj *obj)
 }
 
 #define MAX_CYCLE_STACK_DEPTH 256
+
+int
+pdf_array_cycle_sibling(fz_context *ctx, pdf_obj *arr, pdf_obj *item, int last)
+{
+	int i;
+	for (i = 0; i < last; ++i)
+		if (!pdf_objcmp(ctx, pdf_array_get(ctx, arr, i), item))
+			return 1;
+	return 0;
+}
 
 int
 pdf_cycle(fz_context *ctx, pdf_cycle_list *here, pdf_cycle_list *up, pdf_obj *obj)
